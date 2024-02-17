@@ -8,12 +8,16 @@ use std::{
 use image::imageops::FilterType;
 
 pub use point::Point2;
+pub use colors::{Lab, Laba};
+pub use lab_image::LabImage;
 
 use config::Config;
 use collager::{CollagerConfig, Collager};
 
 mod config;
 mod point;
+mod colors;
+mod lab_image;
 mod collager;
 
 

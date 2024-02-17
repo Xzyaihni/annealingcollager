@@ -5,11 +5,11 @@ use image::{
     Rgb32FImage,
     Rgba32FImage,
     RgbImage,
-    imageops,
+    imageops::{self, FilterType},
     buffer::ConvertBuffer
 };
 
-use crate::Point2;
+use crate::{Point2, Lab, Laba, LabImage};
 
 
 pub struct CollagerConfig
@@ -21,14 +21,14 @@ pub struct CollagerConfig
 pub struct Collager
 {
     config: CollagerConfig,
-    image: Rgb32FImage
+    image: LabImage
 }
 
 impl Collager
 {
     pub fn new(config: CollagerConfig, image: Rgb32FImage) -> Self
     {
-        Self{config, image}
+        Self{config, image: image.into()}
     }
 
     pub fn collage(&self, images: &[Rgba32FImage]) -> RgbImage
@@ -58,7 +58,7 @@ impl Collager
 
         let output = Annealer::new(background, 0.1).anneal(self.config.steps);
 
-        println!("final error: {:.3}", output.energy());
+        println!("final error: {:.1}", output.energy());
 
         output.applied().convert()
     }
@@ -68,7 +68,8 @@ impl Collager
 struct ImageInfo
 {
     index: usize,
-    position: Point2<f32>
+    position: Point2<f32>,
+    scale: Point2<f32>
 }
 
 impl ImageInfo
@@ -80,6 +81,10 @@ impl ImageInfo
             position: Point2{
                 x: fastrand::f32(),
                 y: fastrand::f32()
+            },
+            scale: Point2{
+                x: fastrand::f32() + 0.5,
+                y: fastrand::f32() + 0.5
             }
         }
     }
@@ -88,7 +93,7 @@ impl ImageInfo
 #[derive(Debug, Clone)]
 struct ImageAnnealable<'a>
 {
-    original: &'a Rgb32FImage,
+    original: &'a LabImage,
     current: &'a Rgba32FImage,
     images: &'a [Rgba32FImage],
     info: ImageInfo
@@ -97,7 +102,7 @@ struct ImageAnnealable<'a>
 impl<'a> ImageAnnealable<'a>
 {
     pub fn new(
-        original: &'a Rgb32FImage,
+        original: &'a LabImage,
         current: &'a Rgba32FImage,
         images: &'a [Rgba32FImage]
     ) -> Self
@@ -125,28 +130,27 @@ impl<'a> ImageAnnealable<'a>
     {
         let delta = fastrand::f32() * 2.0 - 1.0;
 
-        let value: f32 = v + (delta * temperature);
-
-        value.clamp(0.0, 1.0)
+        v + (delta * temperature)
     }
 
     fn add_image(&self) -> Rgba32FImage
     {
-        let raw = self.images[self.info.index].clone();
+        let raw = &self.images[self.info.index];
 
-        raw
+        let original_size = Point2{x: raw.width(), y: raw.height()};
+        let size = (original_size.map(|x| x as f32) * self.info.scale).map(|x| x as u32);
+
+        // hopefully nearest is good enough
+        let resized = imageops::resize(raw, size.x, size.y, FilterType::Nearest);
+
+        resized
     }
 
-    fn image_difference(a: impl Iterator<Item=Rgb<f32>>, b: impl Iterator<Item=Rgb<f32>>) -> f32
+    fn image_difference(a: impl Iterator<Item=Lab>, b: impl Iterator<Item=Lab>) -> f32
     {
         a.zip(b).map(|(original, changed)|
         {
-            original.0.into_iter()
-                .zip(changed.0.into_iter())
-                .map(|(a, b)|
-                {
-                    (a - b).powi(2)
-                }).sum::<f32>().sqrt()
+            original.distance(changed)
         }).sum()
     }
 }
@@ -162,7 +166,8 @@ impl<'a> Annealable for ImageAnnealable<'a>
             ImageAnnealable::float_changed(v, temperature)
         };
 
-        output.info.position = output.info.position.map(|x| change(x));
+        output.info.scale = output.info.scale.map(|x| change(x).min(0.0));
+        output.info.position = output.info.position.map(|x| change(x).clamp(-1.0, 1.0));
 
         let do_pick_index = fastrand::f32() < temperature;
         if do_pick_index
@@ -178,8 +183,8 @@ impl<'a> Annealable for ImageAnnealable<'a>
         let pixels = self.applied();
 
         ImageAnnealable::image_difference(
-            self.original.pixels().copied(),
-            pixels.pixels().copied().map(|Rgba([r, g, b, _a])| Rgb::from([r, g, b]))
+            self.original.pixels(),
+            pixels.pixels().map(|pixel| Laba::from(*pixel).no_alpha())
         )
     }
 }
@@ -187,14 +192,14 @@ impl<'a> Annealable for ImageAnnealable<'a>
 #[derive(Debug, Clone)]
 struct BackgroundAnnealable<'a>
 {
-    original: &'a Rgb32FImage,
+    original: &'a LabImage,
     compare: &'a Rgba32FImage,
     color: Rgb<f32>
 }
 
 impl<'a> BackgroundAnnealable<'a>
 {
-    pub fn new(original: &'a Rgb32FImage, compare: &'a Rgba32FImage) -> Self
+    pub fn new(original: &'a LabImage, compare: &'a Rgba32FImage) -> Self
     {
         let r = fastrand::f32;
 
@@ -229,7 +234,7 @@ impl<'a> Annealable for BackgroundAnnealable<'a>
     {
         let change = |v|
         {
-            ImageAnnealable::float_changed(v, temperature)
+            ImageAnnealable::float_changed(v, temperature).clamp(0.0, 1.0)
         };
 
         let c = self.color.0;
@@ -246,8 +251,8 @@ impl<'a> Annealable for BackgroundAnnealable<'a>
         let pixels = self.applied();
 
         ImageAnnealable::image_difference(
-            self.original.pixels().copied(),
-            pixels.pixels().copied().map(|Rgba([r, g, b, _a])| Rgb::from([r, g, b]))
+            self.original.pixels(),
+            pixels.pixels().map(|pixel| Laba::from(*pixel).no_alpha())
         )
     }
 }
