@@ -9,7 +9,7 @@ use image::imageops::FilterType;
 
 pub use point::Point2;
 pub use colors::{Lab, Laba};
-pub use lab_image::LabImage;
+pub use lab_image::{LabImage, LabaImage};
 
 use config::Config;
 use collager::{CollagerConfig, Collager};

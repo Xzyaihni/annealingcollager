@@ -1,16 +1,13 @@
 use image::{
-    Rgb,
-    Rgba,
-    Pixel,
     Rgb32FImage,
     Rgba32FImage,
-    RgbImage,
-    imageops::{self, FilterType},
-    buffer::ConvertBuffer
+    RgbImage
 };
 
-use crate::{Point2, Lab, Laba, LabImage};
+use crate::{Point2, Lab, Laba, LabImage, LabaImage};
 
+
+const SQRT_DISTANCE: bool = false;
 
 pub struct CollagerConfig
 {
@@ -33,11 +30,22 @@ impl Collager
 
     pub fn collage(&self, images: &[Rgba32FImage]) -> RgbImage
     {
-        let mut output = Rgba32FImage::from_pixel(
+        let images: Vec<_> = images.iter().map(|image|
+        {
+            LabaImage::from(image.clone())
+        }).collect();
+
+        let images = &images;
+
+        let output = LabaImage::repeat(
+            Laba{l: 0.0, a: 0.0, b: 0.0, alpha: 0.0},
             self.image.width(),
-            self.image.height(),
-            Rgba::from([0.0, 0.0, 0.0, 0.0])
+            self.image.height()
         );
+
+        let background = BackgroundAnnealable::new(&self.image, &output);
+
+        let mut output = Annealer::new(background, 10.0).anneal(self.config.steps).applied();
 
         let tenth = self.config.amount / 10;
         for i in 0..self.config.amount
@@ -51,16 +59,17 @@ impl Collager
 
             let annealable = ImageAnnealable::new(&self.image, &output, images);
 
-            output = Annealer::new(annealable, 0.1).anneal(self.config.steps).applied();
+            output = Annealer::new(annealable, 0.5).anneal(self.config.steps).applied();
         }
 
-        let background = BackgroundAnnealable::new(&self.image, &output);
+        let final_error = ImageAnnealable::image_difference(
+            self.image.pixels().copied(),
+            output.pixels().map(|pixel| pixel.no_alpha())
+        );
 
-        let output = Annealer::new(background, 0.1).anneal(self.config.steps);
+        println!("final error: {final_error:.1}");
 
-        println!("final error: {:.1}", output.energy());
-
-        output.applied().convert()
+        output.to_rgb()
     }
 }
 
@@ -94,8 +103,8 @@ impl ImageInfo
 struct ImageAnnealable<'a>
 {
     original: &'a LabImage,
-    current: &'a Rgba32FImage,
-    images: &'a [Rgba32FImage],
+    current: &'a LabaImage,
+    images: &'a [LabaImage],
     info: ImageInfo
 }
 
@@ -103,8 +112,8 @@ impl<'a> ImageAnnealable<'a>
 {
     pub fn new(
         original: &'a LabImage,
-        current: &'a Rgba32FImage,
-        images: &'a [Rgba32FImage]
+        current: &'a LabaImage,
+        images: &'a [LabaImage]
     ) -> Self
     {
         let info = ImageInfo::random(images.len());
@@ -112,18 +121,14 @@ impl<'a> ImageAnnealable<'a>
         Self{original, current, images, info}
     }
 
-    pub fn applied(&self) -> Rgba32FImage
+    pub fn applied(&self) -> LabaImage
     {
-        let mut output = self.current.clone();
-
         let add_image = self.add_image();
 
         let size = Point2{x: self.current.width(), y: self.current.height()}.map(|x| x as f32);
-        let Point2{x, y} = (self.info.position * size).map(|x| x as i64);
+        let position = (self.info.position * size).map(|x| x as i32);
 
-        imageops::overlay(&mut output, &add_image, x, y);
-
-        output
+        self.current.clone().overlay(&add_image, position)
     }
 
     fn float_changed(v: f32, temperature: f32) -> f32
@@ -133,25 +138,40 @@ impl<'a> ImageAnnealable<'a>
         v + (delta * temperature)
     }
 
-    fn add_image(&self) -> Rgba32FImage
+    fn add_image(&self) -> LabaImage
     {
-        let raw = &self.images[self.info.index];
+        let raw = self.image();
 
         let original_size = Point2{x: raw.width(), y: raw.height()};
-        let size = (original_size.map(|x| x as f32) * self.info.scale).map(|x| x as u32);
+        let size = (original_size.map(|x| x as f32) * self.info.scale).map(|x| x as usize);
 
-        // hopefully nearest is good enough
-        let resized = imageops::resize(raw, size.x, size.y, FilterType::Nearest);
-
-        resized
+        raw.resized_nearest(size)
     }
 
     fn image_difference(a: impl Iterator<Item=Lab>, b: impl Iterator<Item=Lab>) -> f32
     {
         a.zip(b).map(|(original, changed)|
         {
-            original.distance(changed)
+            if SQRT_DISTANCE
+            {
+                original.distance(changed).sqrt()
+            } else
+            {
+                original.distance(changed)
+            }
         }).sum()
+    }
+
+    fn image(&self) -> &LabaImage
+    {
+        &self.images[self.info.index]
+    }
+
+    fn current_size(&self) -> Point2<f32>
+    {
+        let image = self.image();
+
+        Point2{x: image.width(), y: image.height()}.map(|x| x as f32) * self.info.scale
     }
 }
 
@@ -166,8 +186,18 @@ impl<'a> Annealable for ImageAnnealable<'a>
             ImageAnnealable::float_changed(v, temperature)
         };
 
-        output.info.scale = output.info.scale.map(|x| change(x).min(0.0));
-        output.info.position = output.info.position.map(|x| change(x).clamp(-1.0, 1.0));
+        output.info.scale = output.info.scale.map(|x| change(x).max(0.01));
+
+        let current_size = Point2{x: self.current.width(), y: self.current.height()};
+
+        let less_size = output.current_size().map(|x| (x - 1.0).max(0.0));
+        let size_ratio = less_size / current_size.map(|x| x as f32);
+        output.info.position = output.info.position
+            .zip(size_ratio)
+            .map(|(x, limit)|
+            {
+                change(x).clamp(-limit, 1.0)
+            });
 
         let do_pick_index = fastrand::f32() < temperature;
         if do_pick_index
@@ -183,8 +213,8 @@ impl<'a> Annealable for ImageAnnealable<'a>
         let pixels = self.applied();
 
         ImageAnnealable::image_difference(
-            self.original.pixels(),
-            pixels.pixels().map(|pixel| Laba::from(*pixel).no_alpha())
+            self.original.pixels().copied(),
+            pixels.pixels().map(|pixel| pixel.no_alpha())
         )
     }
 }
@@ -193,38 +223,34 @@ impl<'a> Annealable for ImageAnnealable<'a>
 struct BackgroundAnnealable<'a>
 {
     original: &'a LabImage,
-    compare: &'a Rgba32FImage,
-    color: Rgb<f32>
+    compare: &'a LabaImage,
+    color: Lab
 }
 
 impl<'a> BackgroundAnnealable<'a>
 {
-    pub fn new(original: &'a LabImage, compare: &'a Rgba32FImage) -> Self
+    pub fn new(original: &'a LabImage, compare: &'a LabaImage) -> Self
     {
-        let r = fastrand::f32;
+        let r = || fastrand::f32() * 100.0;
 
-        Self{original, compare, color: Rgb::from([r(), r(), r()])}
+        Self{original, compare, color: Lab{l: r(), a: r(), b: r()}}
     }
 
-    pub fn applied(&self) -> Rgba32FImage
+    pub fn applied(&self) -> LabaImage
     {
         // who in the hell thought that storing the pixels as Vec<f32>
         // is more efficient than Vec<Rgb<f32>>????
         // oh yea let me just try to do this optimization that makes everything slower!
-        let blended = self.compare.pixels().flat_map(|pixel|
+        let blended = self.compare.pixels().map(|pixel|
         {
-            let mut background = self.color.to_rgba();
-            background.blend(pixel);
-
-            // clearly this is the optimal way to store pixels!
-            background.channels().iter().copied().collect::<Vec<_>>()
+            Laba::from(self.color).blend(*pixel)
         }).collect();
 
-        Rgba32FImage::from_raw(
+        LabaImage::from_raw(
+            blended,
             self.compare.width(),
-            self.compare.height(),
-            blended
-        ).unwrap()
+            self.compare.height()
+        )
     }
 }
 
@@ -234,14 +260,14 @@ impl<'a> Annealable for BackgroundAnnealable<'a>
     {
         let change = |v|
         {
-            ImageAnnealable::float_changed(v, temperature).clamp(0.0, 1.0)
+            ImageAnnealable::float_changed(v, temperature)
         };
 
-        let c = self.color.0;
+        let c = self.color;
 
         let mut output = self.clone();
 
-        output.color = Rgb::from([change(c[0]), change(c[1]), change(c[2])]);
+        output.color = Lab{l: change(c.l), a: change(c.a), b: change(c.b)};
 
         output
     }
@@ -251,8 +277,8 @@ impl<'a> Annealable for BackgroundAnnealable<'a>
         let pixels = self.applied();
 
         ImageAnnealable::image_difference(
-            self.original.pixels(),
-            pixels.pixels().map(|pixel| Laba::from(*pixel).no_alpha())
+            self.original.pixels().copied(),
+            pixels.pixels().map(|pixel| pixel.no_alpha())
         )
     }
 }

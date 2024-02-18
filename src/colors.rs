@@ -20,6 +20,103 @@ impl Laba
             b: self.b
         }
     }
+
+    pub fn blend(self, other: Laba) -> Laba
+    {
+        if self.alpha == 0.0
+        {
+            return other;
+        } else if other.alpha == 0.0
+        {
+            return self;
+        }
+
+        let lerp = |a, b, t|
+        {
+            a * (1.0 - t) + b * t
+        };
+
+        // or u could express this as lerp(self.alpha, 1.0, other.alpha)
+        let alpha = (other.alpha + self.alpha * (1.0 - other.alpha)).clamp(0.0, 1.0);
+
+        let mix = |a, b|
+        {
+            lerp(a * self.alpha, b, other.alpha) / alpha
+        };
+
+        Self{
+            l: mix(self.l, other.l),
+            a: mix(self.a, other.a),
+            b: mix(self.b, other.b),
+            alpha
+        }
+    }
+}
+
+impl From<Lab> for Laba
+{
+    fn from(lab: Lab) -> Self
+    {
+        Self{
+            l: lab.l,
+            a: lab.a,
+            b: lab.b,
+            alpha: 1.0
+        }
+    }
+}
+
+impl From<Lab> for Rgb<u8>
+{
+    fn from(value: Lab) -> Self
+    {
+        let rgb = Rgb::from(value);
+
+        let inner: Vec<u8> = rgb.0.into_iter().map(|x: f32|
+        {
+            (x.clamp(0.0, 1.0) * u8::MAX as f32) as u8
+        }).collect();
+        
+        let inner: [u8; 3] = inner.try_into().unwrap();
+
+        Rgb::from(inner)
+    }
+}
+
+impl From<Lab> for Rgb<f32>
+{
+    fn from(value: Lab) -> Self
+    {
+        let xyz = Xyz::from(value);
+
+        Self::from(xyz)
+    }
+}
+
+impl From<Lab> for Xyz
+{
+    fn from(value: Lab) -> Self
+    {
+        let l_rev = (value.l + 16.0) / 116.0;
+
+        let delta = 6.0_f32 / 29.0;
+        let f_inv = |value: f32|
+        {
+            if value > delta
+            {
+                value.powi(3)
+            } else
+            {
+                3.0 * delta.powi(2) * (value - (4.0 / 29.0))
+            }
+        };
+
+        let x = 95.0489 * f_inv(l_rev + value.a / 500.0);
+        let y = 100.0 * f_inv(l_rev);
+        let z = 108.884 * f_inv(l_rev - value.b / 200.0);
+
+        Self{x, y, z}
+    }
 }
 
 impl From<Rgba<f32>> for Laba
@@ -32,10 +129,8 @@ impl From<Rgba<f32>> for Laba
         let lab = Lab::from(rgb);
 
         Self{
-            l: lab.l,
-            a: lab.a,
-            b: lab.b,
-            alpha: value.0[3]
+            alpha: value.0[3].clamp(0.0, 1.0),
+            ..Laba::from(lab)
         }
     }
 }
@@ -107,6 +202,20 @@ struct Xyz
     z: f32
 }
 
+impl Xyz
+{
+    pub fn map<F>(self, mut f: F) -> Self
+    where
+        F: FnMut(f32) -> f32 
+    {
+        Xyz{
+            x: f(self.x),
+            y: f(self.y),
+            z: f(self.z)
+        }
+    }
+}
+
 impl From<Rgb<f32>> for Xyz
 {
     fn from(value: Rgb<f32>) -> Self
@@ -133,6 +242,33 @@ impl From<Rgb<f32>> for Xyz
         let z = 0.0193339 * r + 0.1191920 * g + 0.9503041 * b;
 
         Self{x, y, z}
+    }
+}
+
+impl From<Xyz> for Rgb<f32>
+{
+    fn from(value: Xyz) -> Self
+    {
+        let value = value.map(|x| x / 100.0);
+
+        let f = |a: f32, b: f32, c: f32| -> f32
+        {
+            let x = value.x * a + value.y * b + value.z * c;
+
+            if x > 0.0031308
+            {
+                1.055 * (x.powf(1.0 / 2.4)) - 0.055
+            } else
+            {
+                12.92 * x
+            }.clamp(0.0, 1.0)
+        };
+
+        let r = f(3.2406, -1.5372, -0.4986);
+        let g = f(-0.9689, 1.8758, 0.0415);
+        let b = f(0.0557, -0.2040, 1.0570);
+
+        Rgb::from([r, g, b])
     }
 }
 
@@ -172,5 +308,24 @@ mod tests
         close_enough(xyz.x, 20.907);
         close_enough(xyz.y, 11.278);
         close_enough(xyz.z, 58.190);
+    }
+
+    #[test]
+    fn rgb_to_lab()
+    {
+        let rgb = Rgb::from([0.3, 0.6, 0.9]);
+
+        let lab = Lab::from(rgb);
+
+        close_enough(lab.l, 61.673);
+        close_enough(lab.a, 0.33);
+        close_enough(lab.b, -45.62);
+
+        let back_rgb = Rgb::from(lab);
+
+        rgb.0.iter().zip(back_rgb.0.iter()).for_each(|(&a, &b)|
+        {
+            close_enough(a, b);
+        });
     }
 }
