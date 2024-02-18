@@ -618,6 +618,7 @@ pub struct Config
     pub input: String,
     pub output: String,
     pub max_size: Option<u32>,
+    pub little_size: Option<u32>,
     pub steps: u32,
     pub amount: u32,
     pub debug: bool
@@ -631,6 +632,7 @@ impl Config
         let mut input = None;
         let mut output = "output.png".to_owned();
         let mut max_size = None;
+        let mut little_size = None;
         let mut steps = 100_u32;
         let mut amount = 100_u32;
         let mut debug = false;
@@ -641,6 +643,7 @@ impl Config
         parser.push_required(&mut input, 'i', "input", "input");
         parser.push(&mut output, 'o', "output", "output path");
         parser.push(&mut max_size, 'S', "size", "max size of the input image");
+        parser.push(&mut little_size, None, "little-size", "max size of the directory images");
         parser.push(&mut steps, 's', "steps", "amount of steps to anneal for");
         parser.push(&mut amount, 'a', "amount", "amount of images to use in the final collage");
         parser.push_flag(&mut debug, None, "debug", "debug mode", true);
@@ -655,6 +658,7 @@ impl Config
             input: input.unwrap(),
             output,
             max_size,
+            little_size,
             steps,
             amount,
             debug

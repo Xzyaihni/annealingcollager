@@ -224,10 +224,10 @@ impl<'a> Annealable for ImageAnnealable<'a>
             .zip(size_ratio)
             .map(|(x, limit)|
             {
-                change(x, 1.0).clamp(0.0, 1.0 - limit)
+                change(x, 1.0).clamp(0.0, 1.0 - limit.min(1.0))
             });
 
-        output.info.angle = change(output.info.angle, 0.05) % (2.0 * consts::PI);
+        output.info.angle = change(output.info.angle, 0.01) % (2.0 * consts::PI);
 
         let do_pick_index = fastrand::f32() < temperature;
         if do_pick_index

@@ -5,7 +5,7 @@ use std::{
     fmt::Display
 };
 
-use image::imageops::FilterType;
+use image::imageops::{self, FilterType};
 
 pub use point::Point2;
 pub use colors::{Lab, Laba};
@@ -43,6 +43,15 @@ fn main()
         }).map(|path|
         {
             image::open(path).unwrap().into_rgba32f()
+        }).map(|image|
+        {
+            if let Some(little_size) = config.little_size
+            {
+                imageops::resize(&image, little_size, little_size, FilterType::CatmullRom)
+            } else
+            {
+                image
+            }
         }).collect();
 
     let input_image = image::open(config.input).unwrap();
