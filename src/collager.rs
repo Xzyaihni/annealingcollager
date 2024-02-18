@@ -1,3 +1,5 @@
+use std::f32::consts;
+
 use image::{
     Rgb32FImage,
     Rgba32FImage,
@@ -74,7 +76,8 @@ struct ImageInfo
 {
     index: usize,
     position: Point2<f32>,
-    scale: Point2<f32>
+    scale: Point2<f32>,
+    angle: f32
 }
 
 impl ImageInfo
@@ -90,7 +93,8 @@ impl ImageInfo
             scale: Point2{
                 x: fastrand::f32() + 0.5,
                 y: fastrand::f32() + 0.5
-            }
+            },
+            angle: fastrand::f32() * (2.0 * consts::PI)
         }
     }
 }
@@ -124,7 +128,7 @@ impl<'a> ImageAnnealable<'a>
         let size = Point2{x: self.current.width(), y: self.current.height()}.map(|x| x as f32);
         let position = (self.info.position * size).map(|x| x as i32);
 
-        self.current.clone().overlay(&add_image, position)
+        self.current.clone().overlay_rotated(&add_image, position, self.info.angle)
     }
 
     fn float_changed(v: f32, temperature: f32) -> f32
@@ -194,6 +198,8 @@ impl<'a> Annealable for ImageAnnealable<'a>
             {
                 change(x).clamp(-limit, 1.0)
             });
+
+        output.info.angle = change(output.info.angle) % (2.0 * consts::PI);
 
         let do_pick_index = fastrand::f32() < temperature;
         if do_pick_index

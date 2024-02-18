@@ -249,6 +249,55 @@ impl LabImage
 
         self
     }
+
+    pub fn overlay_rotated(
+        mut self,
+        other: &LabaImage,
+        position: Point2<i32>,
+        angle: f32
+    ) -> LabImage
+    {
+        // rotates around 0,0 but that shouldnt matter for this thing
+        let rotate = |position: Point2<i32>, angle: f32|
+        {
+            let position = position.map(|x| x as f32);
+
+            let a_cos = angle.cos();
+            let a_sin = angle.sin();
+
+            Point2{
+                x: a_cos * position.x - a_sin * position.y,
+                y: a_sin * position.x + a_cos * position.y
+            }
+        };
+
+        other.pixels_positions().for_each(|(pixel_position, pixel)|
+        {
+            let position = rotate(position + pixel_position, angle);
+
+            let mut put_pos = |position|
+            {
+                if let Some(this_pixel) = self.get_mut(position)
+                {
+                    *this_pixel = this_pixel.blend(*pixel);
+                }
+            };
+
+            // the ceil/floor thing is necessary to not leave any holes
+            
+            let xf = position.x.floor() as i32;
+            let xc = position.x.ceil() as i32;
+            let yf = position.y.floor() as i32;
+            let yc = position.y.ceil() as i32;
+
+            put_pos(Point2{x: xf, y: yf});
+            put_pos(Point2{x: xf, y: yc});
+            put_pos(Point2{x: xc, y: yf});
+            put_pos(Point2{x: xc, y: yc});
+        });
+
+        self
+    }
 }
 
 impl From<LabaImage> for LabImage
