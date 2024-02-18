@@ -619,7 +619,8 @@ pub struct Config
     pub output: String,
     pub max_size: Option<u32>,
     pub steps: u32,
-    pub amount: u32
+    pub amount: u32,
+    pub debug: bool
 }
 
 impl Config
@@ -632,6 +633,7 @@ impl Config
         let mut max_size = None;
         let mut steps = 100_u32;
         let mut amount = 100_u32;
+        let mut debug = false;
 
         let mut parser = ArgParser::new();
 
@@ -641,6 +643,7 @@ impl Config
         parser.push(&mut max_size, 'S', "size", "max size of the input image");
         parser.push(&mut steps, 's', "steps", "amount of steps to anneal for");
         parser.push(&mut amount, 'a', "amount", "amount of images to use in the final collage");
+        parser.push_flag(&mut debug, None, "debug", "debug mode", true);
 
         if let Err(err) = parser.parse(args)
         {
@@ -653,7 +656,8 @@ impl Config
             output,
             max_size,
             steps,
-            amount
+            amount,
+            debug
         }
     }
 }

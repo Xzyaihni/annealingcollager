@@ -57,7 +57,8 @@ fn main()
 
     let collager_config = CollagerConfig{
         steps: config.steps,
-        amount: config.amount
+        amount: config.amount,
+        debug: config.debug
     };
 
     let collager = Collager::new(collager_config, input_image);

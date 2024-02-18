@@ -257,10 +257,9 @@ impl LabImage
         angle: f32
     ) -> LabImage
     {
-        // rotates around 0,0 but that shouldnt matter for this thing
-        let rotate = |position: Point2<i32>, angle: f32|
+        let rotate = |origin: Point2<f32>, position: Point2<i32>, angle: f32|
         {
-            let position = position.map(|x| x as f32);
+            let position = position.map(|x| x as f32) - origin;
 
             let a_cos = angle.cos();
             let a_sin = angle.sin();
@@ -271,9 +270,14 @@ impl LabImage
             }
         };
 
+        let middle = Point2{
+            x: other.width() as f32 / 2.0,
+            y: other.height() as f32 / 2.0
+        };
+
         other.pixels_positions().for_each(|(pixel_position, pixel)|
         {
-            let position = rotate(position + pixel_position, angle);
+            let position = position.map(|x| x as f32) + rotate(middle, pixel_position, angle);
 
             let mut put_pos = |position|
             {
