@@ -181,12 +181,12 @@ impl<'a> Annealable for ImageAnnealable<'a>
     {
         let mut output = self.clone();
 
-        let change = |v|
+        let change = |v, scale|
         {
-            ImageAnnealable::float_changed(v, temperature)
+            ImageAnnealable::float_changed(v, temperature * scale)
         };
 
-        output.info.scale = output.info.scale.map(|x| change(x).max(0.01));
+        output.info.scale = output.info.scale.map(|x| change(x, 0.5).max(0.01));
 
         let current_size = Point2{x: self.current.width(), y: self.current.height()};
 
@@ -196,10 +196,10 @@ impl<'a> Annealable for ImageAnnealable<'a>
             .zip(size_ratio)
             .map(|(x, limit)|
             {
-                change(x).clamp(-limit, 1.0)
+                change(x, 1.0).clamp(-limit, 1.0)
             });
 
-        output.info.angle = change(output.info.angle) % (2.0 * consts::PI);
+        output.info.angle = change(output.info.angle, 0.05) % (2.0 * consts::PI);
 
         let do_pick_index = fastrand::f32() < temperature;
         if do_pick_index
