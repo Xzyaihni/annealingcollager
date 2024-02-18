@@ -1,6 +1,11 @@
 use image::{Rgb, Rgba};
 
 
+fn lerp(a: f32, b: f32, t: f32) -> f32
+{
+    a * (1.0 - t) + b * t
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct Laba
 {
@@ -30,11 +35,6 @@ impl Laba
         {
             return self;
         }
-
-        let lerp = |a, b, t|
-        {
-            a * (1.0 - t) + b * t
-        };
 
         // or u could express this as lerp(self.alpha, 1.0, other.alpha)
         let alpha = (other.alpha + self.alpha * (1.0 - other.alpha)).clamp(0.0, 1.0);
@@ -152,6 +152,15 @@ impl Lab
         let d_b = other.b - self.b;
 
         d_l.powi(2) + d_a.powi(2) + d_b.powi(2)
+    }
+
+    pub fn blend(self, other: Laba) -> Lab
+    {
+        Self{
+            l: lerp(self.l, other.l, other.alpha),
+            a: lerp(self.a, other.a, other.alpha),
+            b: lerp(self.b, other.b, other.alpha)
+        }
     }
 }
 

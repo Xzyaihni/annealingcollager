@@ -235,6 +235,20 @@ impl LabImage
             }).collect()
         ).unwrap()
     }
+
+    pub fn overlay(mut self, other: &LabaImage, position: Point2<i32>) -> LabImage
+    {
+        other.pixels_positions().for_each(|(pixel_position, pixel)|
+        {
+            let position = position + pixel_position;
+            if let Some(this_pixel) = self.get_mut(position)
+            {
+                *this_pixel = this_pixel.blend(*pixel);
+            }
+        });
+
+        self
+    }
 }
 
 impl From<LabaImage> for LabImage
