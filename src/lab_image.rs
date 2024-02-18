@@ -125,10 +125,22 @@ impl<T> GenericImage<T>
         })
     }
 
+    pub fn size_point(&self) -> Point2<usize>
+    {
+        Point2{
+            x: self.width,
+            y: self.height
+        }
+    }
+
     fn inbounds(&self, position: Point2<i32>) -> bool
     {
-        (0..self.width as i32).contains(&position.x)
-            && (0..self.height as i32).contains(&position.y)
+        let contains = self.size_point().zip(position).map(|(limit, value)|
+        {
+            (0..limit as i32).contains(&value)
+        });
+
+        contains.x && contains.y
     }
 
     fn to_position(&self, index: usize) -> Point2<i32>
