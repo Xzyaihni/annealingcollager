@@ -59,7 +59,7 @@ impl Collager
 
             let annealable = ImageAnnealable::new(&self.image, &output, images);
 
-            output = Annealer::new(annealable, 0.5).anneal(self.config.steps).applied();
+            output = Annealer::new(annealable, 0.2).anneal(self.config.steps).applied();
         }
 
         let final_error = ImageAnnealable::image_difference(
