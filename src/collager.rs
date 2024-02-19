@@ -74,7 +74,7 @@ impl Collager
 
             let annealable = ImageAnnealable::new(&self.image, &output, params);
 
-            output = Annealer::new(annealable, 0.2).anneal(self.config.steps).applied();
+            output = Annealer::new(annealable, 0.4).anneal(self.config.steps).applied();
 
             if self.config.debug
             {
