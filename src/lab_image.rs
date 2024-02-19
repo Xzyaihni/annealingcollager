@@ -75,6 +75,11 @@ impl<T> GenericImage<T>
         self.data.iter()
     }
 
+    pub fn pixels_mut(&mut self) -> impl Iterator<Item=&mut T>
+    {
+        self.data.iter_mut()
+    }
+
     pub fn pixels_positions(&self) -> impl Iterator<Item=(Point2<i32>, &T)>
     {
         self.data.iter().enumerate().map(|(index, pixel)|

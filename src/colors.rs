@@ -154,6 +154,17 @@ impl Lab
         d_l.powi(2) + d_a.powi(2) + d_b.powi(2)
     }
 
+    pub fn map<F>(self, mut f: F) -> Self
+    where
+        F: FnMut(f32) -> f32
+    {
+        Self{
+            l: f(self.l),
+            a: f(self.a),
+            b: f(self.b)
+        }
+    }
+
     pub fn blend(self, other: Laba) -> Lab
     {
         Self{

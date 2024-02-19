@@ -65,10 +65,12 @@ impl Collager
                     Node::cons(
                         ScaleParam::random(),
                         Node::cons(
-                            AngleParam::random(),
+                            HueParam::random(),
                             Node::cons(
-                                PositionParam::random(),
-                                Node::nil()))));
+                                AngleParam::random(),
+                                Node::cons(
+                                    PositionParam::random(),
+                                    Node::nil())))));
 
             let annealable = ImageAnnealable::new(&self.image, &output, params);
 
@@ -269,6 +271,47 @@ impl Paramable for ScaleParam
         };
 
         Self(self.0.map(|x| change(x, 0.5).max(0.05)))
+    }
+}
+
+#[derive(Clone)]
+struct HueParam(Lab);
+
+impl HueParam
+{
+    fn random() -> Self
+    {
+        let r = |value|
+        {
+            (fastrand::f32() * 2.0 - 1.0) * value
+        };
+
+        Self(Lab{l: r(25.0), a: r(50.0), b: r(50.0)})
+    }
+}
+
+impl Paramable for HueParam
+{
+    fn apply(&self, mut state: ImageState) -> ImageState
+    {
+        state.add_image.as_mut().unwrap().pixels_mut().for_each(|pixel|
+        {
+            pixel.l += self.0.l;
+            pixel.a += self.0.a;
+            pixel.b += self.0.b;
+        });
+
+        state
+    }
+
+    fn neighbor(self, temperature: f32) -> Self
+    {
+        let change = |v, scale|
+        {
+            UsefulOps::float_changed(v, temperature * scale)
+        };
+
+        Self(self.0.map(|x| change(x, 10.0)))
     }
 }
 
