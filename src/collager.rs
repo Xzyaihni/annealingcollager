@@ -47,7 +47,7 @@ impl Collager
 
         let background = BackgroundAnnealable::new(&self.image);
 
-        let mut output = Annealer::new(background, 10.0).anneal(self.config.steps).applied();
+        let mut output = Annealer::new(background, 30.0).anneal(self.config.steps).applied();
 
         let tenth = self.config.amount / 10;
         for i in 0..self.config.amount
