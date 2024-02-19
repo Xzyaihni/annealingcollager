@@ -59,7 +59,18 @@ impl Collager
                 println!("progress: {percentage:.1}%");
             }
 
-            let annealable = ImageAnnealable::new(&self.image, &output, images);
+            let params =
+                Node::cons(
+                    IndexParam::random(images),
+                    Node::cons(
+                        ScaleParam::random(),
+                        Node::cons(
+                            AngleParam::random(),
+                            Node::cons(
+                                PositionParam::random(),
+                                Node::nil()))));
+
+            let annealable = ImageAnnealable::new(&self.image, &output, params);
 
             output = Annealer::new(annealable, 0.2).anneal(self.config.steps).applied();
 
@@ -77,7 +88,7 @@ impl Collager
             }
         }
 
-        let final_error = ImageAnnealable::image_difference(
+        let final_error = UsefulOps::image_difference(
             self.image.pixels().copied(),
             output.pixels().copied()
         );
@@ -90,91 +101,67 @@ impl Collager
     }
 }
 
-#[derive(Debug, Clone)]
-struct ImageInfo
-{
-    index: usize,
-    position: Point2<f32>,
-    scale: Point2<f32>,
-    angle: f32
-}
-
-impl ImageInfo
-{
-    pub fn random(len: usize) -> Self
-    {
-        Self{
-            index: fastrand::usize(0..len),
-            position: Point2{
-                x: fastrand::f32(),
-                y: fastrand::f32()
-            },
-            scale: Point2{
-                x: fastrand::f32() + 0.5,
-                y: fastrand::f32() + 0.5
-            },
-            angle: fastrand::f32() * (2.0 * consts::PI)
-        }
-    }
-}
-
+// if lisp is so good why havent they made lisp 2?
 #[derive(Clone)]
-struct ImageAnnealable<'a>
-{
-    original: &'a LabImage,
-    current: &'a LabImage,
-    images: &'a [LabaImage],
-    info: ImageInfo
-}
+struct Node<T, C>(T, C);
 
-impl<'a> Debug for ImageAnnealable<'a>
+impl<T, C> Node<T, C>
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result
+    pub fn cons(value: T, other: C) -> Self
     {
-        f.debug_struct("ImageAnnealable")
-            .field("info", &self.info)
-            .finish()
+        Self(value, other)
     }
 }
 
-impl<'a> ImageAnnealable<'a>
+impl Node<(), ()>
 {
-    pub fn new(
-        original: &'a LabImage,
-        current: &'a LabImage,
-        images: &'a [LabaImage]
-    ) -> Self
-    {
-        let info = ImageInfo::random(images.len());
+    pub fn nil() -> () {}
+}
 
-        Self{original, current, images, info}
+trait NodeTrait
+{
+    type Item;
+    type Child;
+
+    // the word applies makes no sense here but i dont wanna be confused
+    fn applies(&self, state: ImageState) -> ImageState;
+    fn neighbors(self, temperature: f32) -> Self;
+}
+
+impl NodeTrait for ()
+{
+    type Item = ();
+    type Child = ();
+
+    fn applies(&self, state: ImageState) -> ImageState {state}
+    fn neighbors(self, _temperature: f32) -> () {}
+}
+
+impl<T: Paramable, C: NodeTrait> NodeTrait for Node<T, C>
+{
+    type Item = T;
+    type Child = C;
+
+    fn applies(&self, state: ImageState) -> ImageState
+    {
+        self.1.applies(self.0.apply(state))
     }
 
-    pub fn applied(&self) -> LabImage
+    fn neighbors(self, temperature: f32) -> Self
     {
-        let add_image = self.add_image();
-
-        let size = Point2{x: self.current.width(), y: self.current.height()}.map(|x| x as f32);
-        let position = (self.info.position * size).map(|x| x as i32);
-
-        self.current.clone().overlay_rotated(&add_image, position, self.info.angle)
+        Self(self.0.neighbor(temperature), self.1.neighbors(temperature))
     }
+}
 
+struct UsefulOps;
+
+impl UsefulOps
+{
     fn float_changed(v: f32, temperature: f32) -> f32
     {
         let delta = fastrand::f32() * 2.0 - 1.0;
 
         v + (delta * temperature)
-    }
-
-    fn add_image(&self) -> LabaImage
-    {
-        let raw = self.image();
-
-        let original_size = Point2{x: raw.width(), y: raw.height()};
-        let size = (original_size.map(|x| x as f32) * self.info.scale).map(|x| x as usize);
-
-        raw.resized_nearest(size)
     }
 
     fn image_difference(a: impl Iterator<Item=Lab>, b: impl Iterator<Item=Lab>) -> f32
@@ -190,50 +177,222 @@ impl<'a> ImageAnnealable<'a>
             }
         }).sum()
     }
+}
 
-    fn image(&self) -> &LabaImage
+struct ImageState
+{
+    image: LabImage,
+    add_image: Option<LabaImage>,
+    angle: Option<f32>,
+}
+
+// parametable? who cares its just a word
+trait Paramable
+{
+    fn apply(&self, state: ImageState) -> ImageState;
+    fn neighbor(self, temperature: f32) -> Self;
+}
+
+#[derive(Clone)]
+struct IndexParam<'a>
+{
+    images: &'a [LabaImage],
+    index: usize
+}
+
+impl<'a> IndexParam<'a>
+{
+    fn random(images: &'a [LabaImage]) -> Self
     {
-        &self.images[self.info.index]
-    }
-
-    fn current_size(&self) -> Point2<f32>
-    {
-        let image = self.image();
-
-        Point2{x: image.width(), y: image.height()}.map(|x| x as f32) * self.info.scale
+        Self{index: fastrand::usize(0..images.len()), images}
     }
 }
 
-impl<'a> Annealable for ImageAnnealable<'a>
+impl<'a> Paramable for IndexParam<'a>
+{
+    // i would love imagestate to contain a & but rust lifetimes r cancer
+    // and i cant figure out if i can constrain self lifetime
+    // to contain the & lifetime of the imagestate :/
+    fn apply(&self, mut state: ImageState) -> ImageState
+    {
+        state.add_image = Some(self.images[self.index].clone());
+
+        state
+    }
+
+    fn neighbor(self, temperature: f32) -> Self
+    {
+        let do_pick_index = (fastrand::f32() + 0.05) < temperature;
+        if do_pick_index
+        {
+            Self{index: fastrand::usize(0..self.images.len()), ..self}
+        } else
+        {
+            self
+        }
+    }
+}
+
+#[derive(Clone)]
+struct ScaleParam(Point2<f32>);
+
+impl ScaleParam
+{
+    fn random() -> Self
+    {
+        Self(Point2{
+            x: fastrand::f32() + 0.5,
+            y: fastrand::f32() + 0.5
+        })
+    }
+}
+
+impl Paramable for ScaleParam
+{
+    fn apply(&self, mut state: ImageState) -> ImageState
+    {
+        let raw = state.add_image.as_ref().unwrap();
+
+        let original_size = Point2{x: raw.width(), y: raw.height()};
+        let size = (original_size.map(|x| x as f32) * self.0).map(|x| x as usize);
+
+        state.add_image = Some(raw.resized_nearest(size));
+
+        state
+    }
+
+    fn neighbor(self, temperature: f32) -> Self
+    {
+        let change = |v, scale|
+        {
+            UsefulOps::float_changed(v, temperature * scale)
+        };
+
+        Self(self.0.map(|x| change(x, 0.5).max(0.05)))
+    }
+}
+
+#[derive(Clone)]
+struct AngleParam(f32);
+
+impl AngleParam
+{
+    fn random() -> Self
+    {
+        Self(fastrand::f32() * (2.0 * consts::PI))
+    }
+}
+
+impl Paramable for AngleParam
+{
+    fn apply(&self, mut state: ImageState) -> ImageState
+    {
+        state.angle = Some(self.0);
+
+        state
+    }
+
+    fn neighbor(self, temperature: f32) -> Self
+    {
+        let change = |v, scale|
+        {
+            UsefulOps::float_changed(v, temperature * scale)
+        };
+
+        Self(change(self.0, 0.01) % (2.0 * consts::PI))
+    }
+}
+
+#[derive(Clone)]
+struct PositionParam(Point2<f32>);
+
+impl PositionParam
+{
+    fn random() -> Self
+    {
+        Self(Point2{
+            x: fastrand::f32(),
+            y: fastrand::f32()
+        })
+    }
+}
+
+impl Paramable for PositionParam
+{
+    fn apply(&self, mut state: ImageState) -> ImageState
+    {
+        let add_image = state.add_image.take().unwrap();
+
+        let size = state.image.size_point();
+        let position = (self.0 * size.map(|x| x as f32))
+            .zip(add_image.size_point()
+                 .zip(size)
+                 .map(|(small_size, total_size)| (total_size as i32 - small_size as i32).max(0)))
+            .map(|(x, limit)| (x as i32).clamp(0, limit));
+
+        state.image = state.image.overlay_rotated(&add_image, position, state.angle.unwrap());
+
+        state
+    }
+
+    fn neighbor(self, temperature: f32) -> Self
+    {
+        let change = |v, scale|
+        {
+            UsefulOps::float_changed(v, temperature * scale)
+        };
+
+        Self(self.0.map(|x|
+        {
+            change(x, 1.0)
+        }))
+    }
+}
+
+#[derive(Clone)]
+struct ImageAnnealable<'a, N>
+{
+    original: &'a LabImage,
+    current: &'a LabImage,
+    node: N
+}
+
+impl<'a, N> ImageAnnealable<'a, N>
+{
+    pub fn new(
+        original: &'a LabImage,
+        current: &'a LabImage,
+        node: N
+    ) -> Self
+    where
+        N: Clone
+    {
+        Self{original, current, node}
+    }
+
+    pub fn applied(&self) -> LabImage
+    where
+        N: NodeTrait
+    {
+        let state = ImageState{
+            image: self.current.clone(),
+            add_image: None,
+            angle: None
+        };
+
+        self.node.applies(state).image
+    }
+}
+
+impl<'a, N> Annealable for ImageAnnealable<'a, N>
+where
+    N: NodeTrait + Clone
 {
     fn random_neighbor(&self, temperature: f32) -> Self
     {
         let mut output = self.clone();
 
-        let change = |v, scale|
-        {
-            ImageAnnealable::float_changed(v, temperature * scale)
-        };
-
-        output.info.scale = output.info.scale.map(|x| change(x, 0.5).max(0.05));
-
-        let current_size = Point2{x: self.current.width(), y: self.current.height()};
-
-        let size_ratio = output.current_size() / current_size.map(|x| x as f32);
-        output.info.position = output.info.position
-            .zip(size_ratio)
-            .map(|(x, limit)|
-            {
-                change(x, 1.0).clamp(0.0, 1.0 - limit.min(1.0))
-            });
-
-        output.info.angle = change(output.info.angle, 0.01) % (2.0 * consts::PI);
-
-        let do_pick_index = fastrand::f32() < temperature;
-        if do_pick_index
-        {
-            output.info.index = fastrand::usize(0..self.images.len());
-        }
+        output.node = output.node.neighbors(temperature);
 
         output
     }
@@ -242,7 +401,7 @@ impl<'a> Annealable for ImageAnnealable<'a>
     {
         let pixels = self.applied();
 
-        ImageAnnealable::image_difference(
+        UsefulOps::image_difference(
             self.original.pixels().copied(),
             pixels.pixels().copied()
         )
@@ -291,7 +450,7 @@ impl<'a> Annealable for BackgroundAnnealable<'a>
     {
         let change = |v|
         {
-            ImageAnnealable::float_changed(v, temperature)
+            UsefulOps::float_changed(v, temperature)
         };
 
         let c = self.color;
@@ -307,7 +466,7 @@ impl<'a> Annealable for BackgroundAnnealable<'a>
     {
         let pixels = self.applied();
 
-        ImageAnnealable::image_difference(
+        UsefulOps::image_difference(
             self.original.pixels().copied(),
             pixels.pixels().copied()
         )
