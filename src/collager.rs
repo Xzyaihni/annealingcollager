@@ -224,7 +224,7 @@ impl<'a> Paramable for IndexParam<'a>
 
     fn neighbor(self, temperature: f32) -> Self
     {
-        let do_pick_index = (fastrand::f32() + 0.02) < temperature;
+        let do_pick_index = fastrand::f32() < temperature;
         if do_pick_index
         {
             Self{index: fastrand::usize(0..self.images.len()), ..self}
