@@ -311,7 +311,7 @@ impl Paramable for HueParam
             UsefulOps::float_changed(v, temperature * scale)
         };
 
-        Self(self.0.map(|x| change(x, 10.0)))
+        Self(self.0.map(|x| change(x, 20.0)))
     }
 }
 
@@ -472,9 +472,7 @@ impl<'a> BackgroundAnnealable<'a>
 {
     pub fn new(original: &'a LabImage) -> Self
     {
-        let r = || fastrand::f32() * 100.0;
-
-        Self{original, color: Lab{l: r(), a: r(), b: r()}}
+        Self{original, color: Lab::random()}
     }
 
     pub fn applied(&self) -> LabImage

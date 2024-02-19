@@ -145,6 +145,16 @@ pub struct Lab
 
 impl Lab
 {
+    pub fn random() -> Self
+    {
+        let r = |value|
+        {
+            (fastrand::f32() * 2.0 - 1.0) * value
+        };
+
+        Self{l: r(25.0) + 50.0, a: r(50.0), b: r(50.0)}
+    }
+
     pub fn distance(&self, other: Lab) -> f32
     {
         let d_l = other.l - self.l;
