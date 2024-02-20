@@ -20,6 +20,7 @@ pub struct CollagerConfig
 {
     pub steps: u32,
     pub amount: u32,
+    pub starting_temperature: f32,
     pub allow_scaling: bool,
     pub allow_rotation: bool,
     pub allow_hue: bool,
@@ -77,7 +78,8 @@ impl Collager
 
             let annealable = ImageAnnealable::new(&self.image, &output, params);
 
-            output = Annealer::new(annealable, 0.4).anneal(self.config.steps).applied();
+            output = Annealer::new(annealable, self.config.starting_temperature)
+                .anneal(self.config.steps).applied();
 
             if self.config.debug
             {
@@ -227,8 +229,7 @@ impl<'a> Paramable for IndexParam<'a>
 
     fn neighbor(self, temperature: f32) -> Self
     {
-        let do_pick_index = fastrand::f32() < temperature;
-        if do_pick_index
+        if fastrand::f32() < temperature
         {
             Self{index: fastrand::usize(0..self.images.len()), ..self}
         } else
