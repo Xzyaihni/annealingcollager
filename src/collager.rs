@@ -20,6 +20,9 @@ pub struct CollagerConfig
 {
     pub steps: u32,
     pub amount: u32,
+    pub allow_scaling: bool,
+    pub allow_rotation: bool,
+    pub allow_hue: bool,
     pub debug: bool
 }
 
@@ -63,11 +66,11 @@ impl Collager
                 Node::cons(
                     IndexParam::random(images),
                     Node::cons(
-                        ScaleParam::random(),
+                        ScaleParam::random(self.config.allow_scaling),
                         Node::cons(
-                            HueParam::random(),
+                            HueParam::random(self.config.allow_hue),
                             Node::cons(
-                                AngleParam::random(),
+                                AngleParam::random(self.config.allow_rotation),
                                 Node::cons(
                                     PositionParam::random(),
                                     Node::nil())))));
@@ -236,16 +239,19 @@ impl<'a> Paramable for IndexParam<'a>
 }
 
 #[derive(Clone)]
-struct ScaleParam(Point2<f32>);
+struct ScaleParam(Option<Point2<f32>>);
 
 impl ScaleParam
 {
-    fn random() -> Self
+    fn random(allow: bool) -> Self
     {
-        Self(Point2{
-            x: fastrand::f32() + 0.5,
-            y: fastrand::f32() + 0.5
-        })
+        Self(allow.then(||
+        {
+            Point2{
+                x: fastrand::f32() + 0.5,
+                y: fastrand::f32() + 0.5
+            }
+        }))
     }
 }
 
@@ -253,12 +259,15 @@ impl Paramable for ScaleParam
 {
     fn apply(&self, mut state: ImageState) -> ImageState
     {
-        let raw = state.add_image.as_ref().unwrap();
+        if let Some(scale) = self.0
+        {
+            let raw = state.add_image.as_ref().unwrap();
 
-        let original_size = Point2{x: raw.width(), y: raw.height()};
-        let size = (original_size.map(|x| x as f32) * self.0).map(|x| x as usize);
+            let original_size = Point2{x: raw.width(), y: raw.height()};
+            let size = (original_size.map(|x| x as f32) * scale).map(|x| x as usize);
 
-        state.add_image = Some(raw.resized_nearest(size));
+            state.add_image = Some(raw.resized_nearest(size));
+        }
 
         state
     }
@@ -270,23 +279,26 @@ impl Paramable for ScaleParam
             UsefulOps::float_changed(v, temperature * scale)
         };
 
-        Self(self.0.map(|x| change(x, 0.5).max(0.05)))
+        Self(self.0.map(|value| value.map(|x| change(x, 0.5).max(0.05))))
     }
 }
 
 #[derive(Clone)]
-struct HueParam(Lab);
+struct HueParam(Option<Lab>);
 
 impl HueParam
 {
-    fn random() -> Self
+    fn random(allow: bool) -> Self
     {
         let r = |value|
         {
             (fastrand::f32() * 2.0 - 1.0) * value
         };
 
-        Self(Lab{l: r(25.0), a: r(50.0), b: r(50.0)})
+        Self(allow.then(||
+        {
+            Lab{l: r(25.0), a: r(50.0), b: r(50.0)}
+        }))
     }
 }
 
@@ -294,12 +306,15 @@ impl Paramable for HueParam
 {
     fn apply(&self, mut state: ImageState) -> ImageState
     {
-        state.add_image.as_mut().unwrap().pixels_mut().for_each(|pixel|
+        if let Some(hue) = self.0
         {
-            pixel.l += self.0.l;
-            pixel.a += self.0.a;
-            pixel.b += self.0.b;
-        });
+            state.add_image.as_mut().unwrap().pixels_mut().for_each(|pixel|
+            {
+                pixel.l += hue.l;
+                pixel.a += hue.a;
+                pixel.b += hue.b;
+            });
+        }
 
         state
     }
@@ -311,18 +326,21 @@ impl Paramable for HueParam
             UsefulOps::float_changed(v, temperature * scale)
         };
 
-        Self(self.0.map(|x| change(x, 20.0)))
+        Self(self.0.map(|value| value.map(|x| change(x, 20.0))))
     }
 }
 
 #[derive(Clone)]
-struct AngleParam(f32);
+struct AngleParam(Option<f32>);
 
 impl AngleParam
 {
-    fn random() -> Self
+    fn random(allow: bool) -> Self
     {
-        Self(fastrand::f32() * (2.0 * consts::PI))
+        Self(allow.then(||
+        {
+            fastrand::f32() * (2.0 * consts::PI)
+        }))
     }
 }
 
@@ -330,7 +348,7 @@ impl Paramable for AngleParam
 {
     fn apply(&self, mut state: ImageState) -> ImageState
     {
-        state.angle = Some(self.0);
+        state.angle = Some(self.0.unwrap_or(0.0));
 
         state
     }
@@ -342,7 +360,7 @@ impl Paramable for AngleParam
             UsefulOps::float_changed(v, temperature * scale)
         };
 
-        Self(change(self.0, 0.01) % (2.0 * consts::PI))
+        Self(self.0.map(|value| change(value, 0.01) % (2.0 * consts::PI)))
     }
 }
 

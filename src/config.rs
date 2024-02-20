@@ -621,6 +621,9 @@ pub struct Config
     pub little_size: Option<u32>,
     pub steps: u32,
     pub amount: u32,
+    pub allow_hue: bool,
+    pub allow_rotation: bool,
+    pub allow_scaling: bool,
     pub debug: bool
 }
 
@@ -635,6 +638,9 @@ impl Config
         let mut little_size = None;
         let mut steps = 100_u32;
         let mut amount = 100_u32;
+        let mut allow_hue = true;
+        let mut allow_rotation = true;
+        let mut allow_scaling = true;
         let mut debug = false;
 
         let mut parser = ArgParser::new();
@@ -646,6 +652,9 @@ impl Config
         parser.push(&mut little_size, None, "little-size", "max size of the directory images");
         parser.push(&mut steps, 's', "steps", "amount of steps to anneal for");
         parser.push(&mut amount, 'a', "amount", "amount of images to use in the final collage");
+        parser.push_flag(&mut allow_rotation, None, "disable-rotation", "disallow rotating the little images", false);
+        parser.push_flag(&mut allow_scaling, None, "disable-scaling", "disallow scaling the little images", false);
+        parser.push_flag(&mut allow_hue, None, "disable-hue", "disallow changing color of the little images", false);
         parser.push_flag(&mut debug, None, "debug", "debug mode", true);
 
         if let Err(err) = parser.parse(args)
@@ -661,6 +670,9 @@ impl Config
             little_size,
             steps,
             amount,
+            allow_hue,
+            allow_rotation,
+            allow_scaling,
             debug
         }
     }

@@ -67,6 +67,9 @@ fn main()
     let collager_config = CollagerConfig{
         steps: config.steps,
         amount: config.amount,
+        allow_scaling: config.allow_scaling,
+        allow_rotation: config.allow_rotation,
+        allow_hue: config.allow_hue,
         debug: config.debug
     };
 
