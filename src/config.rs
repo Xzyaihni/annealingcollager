@@ -621,6 +621,7 @@ pub struct Config
     pub little_size: Option<u32>,
     pub steps: u32,
     pub amount: u32,
+    pub starts: u32,
     pub starting_temperature: f32,
     pub allow_hue: bool,
     pub allow_rotation: bool,
@@ -639,6 +640,7 @@ impl Config
         let mut little_size = None;
         let mut steps = 100_u32;
         let mut amount = 100_u32;
+        let mut starts = 2;
         let mut starting_temperature = 0.4;
         let mut allow_hue = true;
         let mut allow_rotation = true;
@@ -654,6 +656,7 @@ impl Config
         parser.push(&mut little_size, None, "little-size", "max size of the directory images");
         parser.push(&mut steps, 's', "steps", "amount of steps to anneal for");
         parser.push(&mut amount, 'a', "amount", "amount of images to use in the final collage");
+        parser.push(&mut starts, None, "starts", "how many times to restart the annealer for each little image");
         parser.push(&mut starting_temperature, 't', "temperature", "starting temperature for little images annealing");
         parser.push_flag(&mut allow_rotation, None, "disable-rotation", "disallow rotating the little images", false);
         parser.push_flag(&mut allow_scaling, None, "disable-scaling", "disallow scaling the little images", false);
@@ -673,6 +676,7 @@ impl Config
             little_size,
             steps,
             amount,
+            starts,
             starting_temperature,
             allow_hue,
             allow_rotation,

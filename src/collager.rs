@@ -20,6 +20,7 @@ pub struct CollagerConfig
 {
     pub steps: u32,
     pub amount: u32,
+    pub starts: u32,
     pub starting_temperature: f32,
     pub allow_scaling: bool,
     pub allow_rotation: bool,
@@ -63,7 +64,8 @@ impl Collager
                 println!("progress: {percentage:.1}%");
             }
 
-            let params =
+            let params = ||
+            {
                 Node::cons(
                     IndexParam::random(images),
                     Node::cons(
@@ -74,12 +76,24 @@ impl Collager
                                 AngleParam::random(self.config.allow_rotation),
                                 Node::cons(
                                     PositionParam::random(),
-                                    Node::nil())))));
+                                    Node::nil())))))
+            };
 
-            let annealable = ImageAnnealable::new(&self.image, &output, params);
+            let anneal = ||
+            {
+                let annealable = ImageAnnealable::new(&self.image, &output, params());
 
-            output = Annealer::new(annealable, self.config.starting_temperature)
-                .anneal(self.config.steps).applied();
+                Annealer::new(annealable, self.config.starting_temperature)
+                    .anneal_with_energy(self.config.steps)
+            };
+
+            output = (0..self.config.starts.max(1)).map(|_|
+            {
+                anneal()
+            }).min_by(|a, b|
+            {
+                a.energy.partial_cmp(&b.energy).unwrap()
+            }).expect("steps must be at least 1").state.applied();
 
             if self.config.debug
             {
@@ -533,22 +547,22 @@ impl<'a> Annealable for BackgroundAnnealable<'a>
     }
 }
 
-trait Annealable
+pub trait Annealable
 {
     fn random_neighbor(&self, temperature: f32) -> Self;
     fn energy(&self) -> f32;
 }
 
 #[derive(Debug, Clone)]
-struct StateEnergy<S>
+pub struct StateEnergy<S>
 {
-    state: S,
-    energy: f32
+    pub state: S,
+    pub energy: f32
 }
 
 impl<S: Annealable> StateEnergy<S>
 {
-    pub fn new(state: S) -> Self
+    fn new(state: S) -> Self
     {
         let energy = state.energy();
 
@@ -556,6 +570,7 @@ impl<S: Annealable> StateEnergy<S>
     }
 }
 
+#[derive(Clone)]
 struct Annealer<S>
 {
     state: StateEnergy<S>,
@@ -570,7 +585,12 @@ impl<S: Annealable + Clone> Annealer<S>
         Self{state: StateEnergy::new(start), best_neighbor: None, max_temperature}
     }
 
-    pub fn anneal(mut self, steps: u32) -> S
+    pub fn anneal(self, steps: u32) -> S
+    {
+        self.anneal_with_energy(steps).state
+    }
+
+    pub fn anneal_with_energy(mut self, steps: u32) -> StateEnergy<S>
     {
         for k in 0..steps
         {
@@ -579,7 +599,7 @@ impl<S: Annealable + Clone> Annealer<S>
             self.improve(self.temperature(1.0 - fraction));
         }
 
-        self.best_neighbor.expect("steps must be above 0").state
+        self.best_neighbor.expect("steps must be above 0")
     }
 
     fn temperature(&self, fraction: f32) -> f32
