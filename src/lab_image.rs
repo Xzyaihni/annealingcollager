@@ -11,34 +11,58 @@ use image::{
 use crate::{Lab, Laba, Point2};
 
 
+#[derive(Debug, Clone, Copy)]
+struct Indexer(Point2<usize>);
+
+impl Indexer
+{
+    pub fn new(width: usize, height: usize) -> Self
+    {
+        Self(Point2{x: width, y: height})
+    }
+
+    pub fn to_position(&self, index: usize) -> Point2<i32>
+    {
+        let x = (index % self.0.x) as i32;
+        let y = (index / self.0.x) as i32;
+
+        Point2{x, y}
+    }
+
+    pub fn to_index(&self, position: Point2<i32>) -> usize
+    {
+        position.x as usize + position.y as usize * self.0.x
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct GenericImage<T>
 {
     data: Vec<T>,
-    width: usize,
-    height: usize
+    indexer: Indexer
 }
 
 impl<T> GenericImage<T>
 {
     pub fn from_raw(data: Vec<T>, width: usize, height: usize) -> Self
     {
-        Self{data, width, height}
+        Self{data, indexer: Indexer::new(width, height)}
     }
 
     pub fn from_fn<F>(width: usize, height: usize, f: F) -> Self
     where
         F: FnMut(Point2<i32>) -> T
     {
+        let indexer = Indexer::new(width, height);
+
         let data = (0..width * height).map(|index|
         {
-            Self::to_position_assoc(width, index)
+            indexer.to_position(index)
         }).map(f).collect();
 
         Self{
             data,
-            width,
-            height
+            indexer
         }
     }
 
@@ -46,7 +70,7 @@ impl<T> GenericImage<T>
     where
         T: Clone
     {
-        Self{data: vec![pixel; width * height], width, height}
+        Self{data: vec![pixel; width * height], indexer: Indexer::new(width, height)}
     }
 
     pub fn map<F, U>(self, f: F) -> GenericImage<U>
@@ -54,20 +78,19 @@ impl<T> GenericImage<T>
         F: FnMut(T) -> U
     {
         GenericImage{
-            width: self.width,
-            height: self.height,
+            indexer: self.indexer,
             data: self.data.into_iter().map(f).collect()
         }
     }
 
     pub fn width(&self) -> usize
     {
-        self.width
+        self.indexer.0.x
     }
 
     pub fn height(&self) -> usize
     {
-        self.height
+        self.indexer.0.y
     }
 
     pub fn pixels(&self) -> impl Iterator<Item=&T>
@@ -82,11 +105,31 @@ impl<T> GenericImage<T>
 
     pub fn pixels_positions(&self) -> impl Iterator<Item=(Point2<i32>, &T)>
     {
-        self.data.iter().enumerate().map(|(index, pixel)|
+        self.pixels().enumerate().map(|(index, pixel)|
         {
-            let position = self.to_position(index);
+            (self.indexer.to_position(index), pixel)
+        })
+    }
 
-            (position, pixel)
+    pub fn pixels_positions_mut(&mut self) -> impl Iterator<Item=(Point2<i32>, &mut T)>
+    {
+        let indexer = self.indexer;
+
+        self.pixels_mut().enumerate().map(move |(index, pixel)|
+        {
+            (indexer.to_position(index), pixel)
+        })
+    }
+
+    pub fn pixels_between_mut(
+        &mut self,
+        low: Point2<i32>,
+        high: Point2<i32>
+    ) -> impl Iterator<Item=(Point2<i32>, &mut T)>
+    {
+        self.pixels_positions_mut().filter(move |(position, _x)|
+        {
+            Self::between(low, high, *position)
         })
     }
 
@@ -94,7 +137,7 @@ impl<T> GenericImage<T>
     {
         self.inbounds(position).then(||
         {
-            let index = self.to_index(position);
+            let index = self.indexer.to_index(position);
 
             &self.data[index]
         })
@@ -104,7 +147,7 @@ impl<T> GenericImage<T>
     {
         self.inbounds(position).then(||
         {
-            let index = self.to_index(position);
+            let index = self.indexer.to_index(position);
 
             &mut self.data[index]
         })
@@ -114,7 +157,7 @@ impl<T> GenericImage<T>
     where
         T: Clone
     {
-        let this_size = Point2{x: self.width, y: self.height};
+        let this_size = self.size_point();
         let scale = this_size.map(|x| x as f32) / size.map(|x| x as f32);
 
         Self::from_fn(size.x, size.y, |position|
@@ -132,43 +175,22 @@ impl<T> GenericImage<T>
 
     pub fn size_point(&self) -> Point2<usize>
     {
-        Point2{
-            x: self.width,
-            y: self.height
-        }
+        self.indexer.0
     }
 
     fn inbounds(&self, position: Point2<i32>) -> bool
     {
-        let contains = self.size_point().zip(position).map(|(limit, value)|
+        Self::between(Point2::repeat(0), self.size_point().map(|x| x as i32), position)
+    }
+
+    fn between(low: Point2<i32>, high: Point2<i32>, position: Point2<i32>) -> bool
+    {
+        let c = position.zip(low.zip(high)).map(|(position, (low, high))|
         {
-            (0..limit as i32).contains(&value)
+            (low..high).contains(&position)
         });
 
-        contains.x && contains.y
-    }
-
-    fn to_position(&self, index: usize) -> Point2<i32>
-    {
-        Self::to_position_assoc(self.width, index)
-    }
-
-    fn to_position_assoc(width: usize, index: usize) -> Point2<i32>
-    {
-        let x = (index % width) as i32;
-        let y = (index / width) as i32;
-
-        Point2{x, y}
-    }
-
-    fn to_index(&self, position: Point2<i32>) -> usize
-    {
-        Self::to_index_assoc(self.width, position)
-    }
-
-    fn to_index_assoc(width: usize, position: Point2<i32>) -> usize
-    {
-        position.x as usize + position.y as usize * width
+        c.x && c.y
     }
 }
 
@@ -284,37 +306,47 @@ impl LabImage
             Point2{
                 x: a_cos * position.x - a_sin * position.y,
                 y: a_sin * position.x + a_cos * position.y
-            }
+            } + origin
         };
 
-        let middle = Point2{
-            x: other.width() as f32 / 2.0,
-            y: other.height() as f32 / 2.0
-        };
+        let middle = other.size_point().map(|x| x as f32) / 2.0;
 
-        other.pixels_positions().for_each(|(pixel_position, pixel)|
+        let global_middle = position.map(|x| x as f32) + middle;
+
+        let this_rotate = |position: Point2<i32>|
         {
-            let position = position.map(|x| x as f32) + rotate(middle, pixel_position, angle);
+            rotate(global_middle, position, angle)
+        };
 
-            let mut put_pos = |position|
+        let size = other.size_point().map(|x| x as i32);
+
+        let rotated_ll = this_rotate(position);
+        let rotated_lh = this_rotate(position + Point2{x: 0, ..size});
+        let rotated_hl = this_rotate(position + Point2{y: 0, ..size});
+        let rotated_hh = this_rotate(position + size);
+
+        let rotated = rotated_ll.zip(rotated_lh).zip(rotated_hl).zip(rotated_hh);
+
+        fn select<F>(f: F) -> impl FnMut((((f32, f32), f32), f32)) -> f32
+        where
+            F: Fn(f32, f32) -> f32
+        {
+            move |(((ll, lh), hl), hh)| f(ll, f(lh, f(hl, hh)))
+        }
+
+        // bounding boxes
+        let bb_low = rotated.map(select(f32::min)).map(|x| x.floor() as i32);
+        let bb_high = rotated.map(select(f32::max)).map(|x| x.ceil() as i32);
+
+        self.pixels_between_mut(bb_low, bb_high).for_each(|(pixel_position, pixel)|
+        {
+            let position = rotate(global_middle, pixel_position, angle)
+                .map(|x| x.round() as i32) - position;
+
+            if let Some(other_pixel) = other.get(position)
             {
-                if let Some(this_pixel) = self.get_mut(position)
-                {
-                    *this_pixel = this_pixel.blend(*pixel);
-                }
-            };
-
-            // the ceil/floor thing is necessary to not leave any holes
-            
-            let xf = position.x.floor() as i32;
-            let xc = position.x.ceil() as i32;
-            let yf = position.y.floor() as i32;
-            let yc = position.y.ceil() as i32;
-
-            put_pos(Point2{x: xf, y: yf});
-            put_pos(Point2{x: xf, y: yc});
-            put_pos(Point2{x: xc, y: yf});
-            put_pos(Point2{x: xc, y: yc});
+                *pixel = pixel.blend(*other_pixel);
+            }
         });
 
         self

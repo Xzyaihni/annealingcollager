@@ -28,6 +28,13 @@ impl<T> Point2<T>
         Self{x, y}
     }
 
+    pub fn repeat(value: T) -> Self
+    where
+        T: Clone
+    {
+        Self{x: value.clone(), y: value}
+    }
+
     pub fn map<F, U>(self, mut f: F) -> Point2<U>
     where
         F: FnMut(T) -> U

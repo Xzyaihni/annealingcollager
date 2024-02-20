@@ -55,7 +55,7 @@ impl Collager
 
         let mut output = Annealer::new(background, 30.0).anneal(self.config.steps).applied();
 
-        let tenth = self.config.amount / 10;
+        let tenth = (self.config.amount / 10).max(1);
         for i in 0..self.config.amount
         {
             if i % tenth == 0
