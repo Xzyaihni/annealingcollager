@@ -370,7 +370,7 @@ impl Paramable for TransparencyParam
         {
             state.add_image.as_mut().unwrap().pixels_mut().for_each(|pixel|
             {
-                pixel.alpha = (pixel.alpha + transparency).clamp(0.0, 1.0);
+                pixel.alpha = (pixel.alpha + transparency).clamp(0.05, 1.0);
             });
         }
 
