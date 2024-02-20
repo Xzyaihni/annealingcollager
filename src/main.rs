@@ -67,7 +67,7 @@ fn main()
     let collager_config = CollagerConfig{
         steps: config.steps,
         amount: config.amount,
-        starts: config.starts,
+        starts: config.starts.max(1),
         starting_temperature: config.starting_temperature,
         allow_scaling: config.allow_scaling,
         allow_rotation: config.allow_rotation,

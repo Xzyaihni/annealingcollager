@@ -87,7 +87,7 @@ impl Collager
                     .anneal_with_energy(self.config.steps)
             };
 
-            output = (0..self.config.starts.max(1)).map(|_|
+            output = (0..self.config.starts).map(|_|
             {
                 anneal()
             }).min_by(|a, b|

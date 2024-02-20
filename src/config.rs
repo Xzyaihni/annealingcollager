@@ -640,7 +640,7 @@ impl Config
         let mut little_size = None;
         let mut steps = 100_u32;
         let mut amount = 100_u32;
-        let mut starts = 2;
+        let mut starts = 3;
         let mut starting_temperature = 0.4;
         let mut allow_hue = true;
         let mut allow_rotation = true;
