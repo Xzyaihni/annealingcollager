@@ -72,6 +72,7 @@ fn main()
         allow_scaling: config.allow_scaling,
         allow_rotation: config.allow_rotation,
         allow_hue: config.allow_hue,
+        allow_transparency: config.allow_transparency,
         debug: config.debug
     };
 

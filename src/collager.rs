@@ -25,6 +25,7 @@ pub struct CollagerConfig
     pub allow_scaling: bool,
     pub allow_rotation: bool,
     pub allow_hue: bool,
+    pub allow_transparency: bool,
     pub debug: bool
 }
 
@@ -73,10 +74,12 @@ impl Collager
                         Node::cons(
                             HueParam::random(self.config.allow_hue),
                             Node::cons(
-                                AngleParam::random(self.config.allow_rotation),
+                                TransparencyParam::random(self.config.allow_transparency),
                                 Node::cons(
-                                    PositionParam::random(),
-                                    Node::nil())))))
+                                    AngleParam::random(self.config.allow_rotation),
+                                    Node::cons(
+                                        PositionParam::random(),
+                                        Node::nil()))))))
             };
 
             let anneal = ||
@@ -342,6 +345,46 @@ impl Paramable for HueParam
         };
 
         Self(self.0.map(|value| value.map(|x| change(x, 20.0))))
+    }
+}
+
+#[derive(Clone)]
+struct TransparencyParam(Option<f32>);
+
+impl TransparencyParam
+{
+    fn random(allow: bool) -> Self
+    {
+        Self(allow.then(||
+        {
+            fastrand::f32() * 2.0 - 1.0
+        }))
+    }
+}
+
+impl Paramable for TransparencyParam
+{
+    fn apply(&self, mut state: ImageState) -> ImageState
+    {
+        if let Some(transparency) = self.0
+        {
+            state.add_image.as_mut().unwrap().pixels_mut().for_each(|pixel|
+            {
+                pixel.alpha = (pixel.alpha + transparency).clamp(0.0, 1.0);
+            });
+        }
+
+        state
+    }
+
+    fn neighbor(self, temperature: f32) -> Self
+    {
+        let change = |v, scale|
+        {
+            UsefulOps::float_changed(v, temperature * scale)
+        };
+
+        Self(self.0.map(|value| change(value, 0.01).clamp(-1.0, 1.0)))
     }
 }
 

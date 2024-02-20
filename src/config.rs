@@ -624,6 +624,7 @@ pub struct Config
     pub starts: u32,
     pub starting_temperature: f32,
     pub allow_hue: bool,
+    pub allow_transparency: bool,
     pub allow_rotation: bool,
     pub allow_scaling: bool,
     pub debug: bool
@@ -643,6 +644,7 @@ impl Config
         let mut starts = 3;
         let mut starting_temperature = 0.4;
         let mut allow_hue = true;
+        let mut allow_transparency = true;
         let mut allow_rotation = true;
         let mut allow_scaling = true;
         let mut debug = false;
@@ -661,6 +663,7 @@ impl Config
         parser.push_flag(&mut allow_rotation, None, "disable-rotation", "disallow rotating the little images", false);
         parser.push_flag(&mut allow_scaling, None, "disable-scaling", "disallow scaling the little images", false);
         parser.push_flag(&mut allow_hue, None, "disable-hue", "disallow changing color of the little images", false);
+        parser.push_flag(&mut allow_transparency, None, "disable-transparency", "disallow changing opacity of little images", false);
         parser.push_flag(&mut debug, None, "debug", "debug mode", true);
 
         if let Err(err) = parser.parse(args)
@@ -679,6 +682,7 @@ impl Config
             starts,
             starting_temperature,
             allow_hue,
+            allow_transparency,
             allow_rotation,
             allow_scaling,
             debug
